@@ -1,0 +1,150 @@
+import roslibpy
+import time
+
+# Configuration
+IP = '192.168.8.104'
+PORT = 9012
+ROBOT_NAME = 'foxtrot'
+
+# Initialize ROS connection
+ros = roslibpy.Ros(host=IP, port=PORT)
+ros.run()
+
+# Function to create movement commands
+def create_movement_command(linear_speed=0.1, angular_speed=0.0):
+    return {
+        'linear': {'x': linear_speed, 'y': 0.0, 'z': 0.0},
+        'angular': {'x': 0.0, 'y': 0.0, 'z': angular_speed}
+    }
+
+# Movement functions
+def move_forward():
+    movement_command = create_movement_command(linear_speed=0.1)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+def move_slow_and_turn(error):
+    k = 1  # Proportional control constant
+    angular_speed = k * error * -0.1  # Negative for right turn
+    movement_command = create_movement_command(linear_speed=0.1, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+def move_slow_and_turn(error):
+    k = 1  # Proportional control constant
+    angular_speed = k * error * -0.1  # Negative for right turn
+    movement_command = create_movement_command(linear_speed=0.1, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+def stop_robot():
+    movement_command = create_movement_command(linear_speed=0.0)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+
+def move_right(error):
+    k = 1  # Proportional control constant
+    angular_speed = k * error * -0.1  # Negative for right turn
+    movement_command = create_movement_command(linear_speed=0.05, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+
+def move_left(error):
+    k = 1  # Proportional control constant
+    angular_speed = k * error * -0.1  # Positive for left turn
+    movement_command = create_movement_command(linear_speed=0.05, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+
+def follow_middle(error):
+    k = .1
+    angular_speed = k * error * -0.1
+    movement_command = create_movement_command(linear_speed=0.1, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+def follow_left_wall(error):
+    k = .1
+    angular_speed = k * error * -0.1
+    movement_command = create_movement_command(linear_speed=0.1, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+def follow_right_wall(error):
+    k = .1
+    angular_speed = k * error * -0.1
+    movement_command = create_movement_command(linear_speed=0.1, angular_speed=angular_speed)
+    movement_publisher.publish(roslibpy.Message(movement_command))
+
+def erravg(error):
+    errarr = [0,0,0]
+    errarr[0] = errarr[1]
+    errarr[1] = errarr[2]
+    errarr[2] = error
+    avg = (errarr[0]+errarr[1]+errarr[2])/3
+    #print(avg)
+    return avg
+    
+
+
+
+# IR sensor callback
+def callback_ir(message):
+    values = [reading['value'] for reading in message['readings']]
+    front_value = values[3]  # Adjust index based on sensor configuration
+    left_value = values[0]
+    right_value = values[6]
+    left_center= values[2]
+    right_center=values[5]
+
+
+
+    #print(f'{ROBOT_NAME} IR values: {values}')
+    if right_value == 0:
+        error = left_value - 20
+        avg = erravg(error)
+        follow_left_wall(avg)
+    elif left_value ==0:
+        error = 20 - right_value
+        avg = erravg(error)
+        follow_right_wall(avg)
+    else:
+        error = left_value - right_value
+        avg = erravg(error)
+        follow_middle(avg)
+
+    if front_value>200:
+        #print('object in front'x)
+        print(f'left: {left_value}, right: {right_value}')
+        move_slow_and_turn(error)
+    elif left_center>200:
+        error= error
+        print(f'left: {left_value}, right: {right_value}')
+        move_slow_and_turn(error)
+    elif right_center>200:
+        error= error
+        print(f'left: {left_value}, right: {right_value}')
+        move_slow_and_turn(error)
+    elif left_value>200:
+        error= error
+        print(f'left: {left_value}, right: {right_value}')
+        move_slow_and_turn(error)
+    elif right_value>200:
+        error= error
+        print(f'left: {left_value}, right: {right_value}')
+        move_slow_and_turn(error)   
+
+
+    return error
+
+# Initialize movement publisher
+movement_topic = roslibpy.Topic(ros, f'/{ROBOT_NAME}/cmd_vel', 'geometry_msgs/Twist')
+movement_publisher = movement_topic
+
+# Initialize IR sensor subscriber
+ir_intensity_topic = roslibpy.Topic(ros, f'/{ROBOT_NAME}/ir_intensity', 'irobot_create_msgs/msg/IrIntensityVector')
+ir_subscriber = ir_intensity_topic.subscribe(callback_ir)
+
+# Keep the script running
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    print('Shutting down robot control...')
+    ir_subscriber.unsubscribe()
+    stop_robot()
+    ros.terminate()
