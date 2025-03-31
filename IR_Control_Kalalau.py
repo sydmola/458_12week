@@ -21,7 +21,7 @@ Kp = 0.035
 # Thresholds
 desired_distance = 50
 right_drop_threshold = 10  # Significant drop in right IR sensor value
-sharp_turn_factor = 0.001    # Scaling for sharper turns
+sharp_turn_factor = 0.01    # Scaling for sharper turns
 
 # Variable to track previous right IR sensor reading
 prev_right_distance = None
