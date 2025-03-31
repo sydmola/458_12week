@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/roslibjs/1.1.0/roslib.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: beige;
+        }
+        h1 {
+            font-size: 36px;
+            margin: 20px 0;
+        }
+        img {
+            width: 60%;
+            max-width: 500px;
+            margin: 20px 0;
+            border-radius: 15px;
+            border: 3px solid black;
+            transition: transform 1s ease-in-out;
+        }
+        img:hover {
+            rotate: 360deg;
+        }
+        input {
+            padding: 8px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px;
+            font-size: 16px;
+            background-color: lightblue;
+            border: 1px solid blue;
+            cursor: pointer;
+            transition: background 0.3s;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            text-align: center;
+        }
+        button:hover {
+            background-color: deepskyblue;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .status {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 20px;
+            color: red;
+        }
+        .position p {
+            margin: 3px;
+            background-color: rgb(218, 72, 43);
+            color: white;
+            border-radius: 18px;
+            padding: 10px;
+            width: 100px;
+            display: inline-block;
+        }
+        .chart-container {
+            width: 60%;
+            margin: auto;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Control Panel</h1>
+    <br>
+    <input type="text" id="nameInput" placeholder="Enter robot name">
+    <button id="connBtn">C</button>
+    <button id="disconnectBtn" style="display: none;">Disconnect</button>
+    <p class="status" id="status">Disconnected</p>
+    <p>Battery: <span id="battVoltage">--</span>%</p>
+    <div class="controls">
+        <button id="leftBtn">L</button>
+        <button id="rightBtn">R</button>
+        <button id="fwdBtn">F</button>
+        <button id="stopBtn">S</button>
+        <button id="wfBtn">WF</button> <!-- Renamed button -->
+    </div>
+    <div class="position" id="position">
+        <p id="posX">X: 0</p>
+        <p id="posY">Y: 0</p>
+    </div>
+    <div class="chart-container">
+        <canvas id="irChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="odomChart"></canvas>
+    </div>
+    <script>
+        console.clear();
+        console.log("Made it here");
+
+        const ip = "192.168.8.104";
+        const port = "9012";
+        let x = 0, y = 0;
+        let robName = "juliet";
+        let intervalId = null;
+        let odomData = []; // Array to store odometry data with timestamps
+        let ros = null; // Declare ros globally
+
+        let connBtn = document.getElementById("connBtn");
+        let nameInput = document.getElementById("nameInput");
+        let fwdBtn = document.getElementById("fwdBtn");
+        let leftBtn = document.getElementById("leftBtn");
+        let rightBtn = document.getElementById("rightBtn");
+        let stopBtn = document.getElementById("stopBtn");
+        let wfBtn = document.getElementById("wfBtn"); // WF button
+        let battVoltage = document.getElementById("battVoltage");
+        let disconnectBtn = document.getElementById("disconnectBtn");
+
+        nameInput.addEventListener("input", function () {
+            robName = nameInput.value.trim() || "juliet"; // Fallback to default
+        });
+
+        // Initialize Chart.js
+        const ctx = document.getElementById('irChart').getContext('2d');
+        const irChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['IR1', 'IR2', 'IR3', 'IR4', 'IR5', 'IR6', 'IR7'],
+                datasets: [{
+                    label: 'IR Sensor Values',
+                    data: [0, 0, 0, 0, 0, 0, 0],
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14
+                            },
+                            color: 'rgba(54, 162, 235, 1)'
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        titleFont: {
+                            size: 16
+                        },
+                        bodyFont: {
+                            size: 14
+                        },
+                        footerFont: {
+                            size: 12
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(54, 162, 235, 0.2)'
+                        },
+                        ticks: {
+                            color: 'rgba(54, 162, 235, 1)',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        max: 3500,
+                        grid: {
+                            color: 'rgba(54, 162, 235, 0.2)'
+                        },
+                        ticks: {
+                            color: 'rgba(54, 162, 235, 1)',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Initialize Chart.js for odometry trajectory
+        const odomCtx = document.getElementById('odomChart').getContext('2d');
+        const odomChart = new Chart(odomCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Trajectory',
+                    data: [], // Array of {x, y} points
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    showLine: true,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'X Position'
+                        },
+                        min: 5,
+                        max: 9.5
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Y Position'
+                        },
+                        min: -2,
+                        max: 2
+                    }
+                }
+            }
+        });
+
+        // When the connect button is clicked
+        connBtn.addEventListener("click", function () {
+            // Establish the WebSocket connection to the robot
+            ros = new ROSLIB.Ros({ // Initialize ros here
+                url: `ws://${ip}:${port}`
+            });
+
+            ros.on('connection', function () {
+                console.log('Connected to websocket server.');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').style.color = 'green';
+                connBtn.style.display = 'none';
+                document.getElementById('disconnectBtn').style.display = 'inline-block';
+
+                // Subscribe to battery state topic
+                let battTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/${robName}/battery_state`,
+                    messageType: 'sensor_msgs/BatteryState'
+                });
+
+                battTopic.subscribe(function (message) {
+                    let btP = message.percentage * 100;
+                    battVoltage.innerText = btP.toFixed(1);
+                });
+
+                // Subscribe to odometry topic
+                let odomTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/${robName}/odom`,
+                    messageType: 'nav_msgs/Odometry'
+                });
+
+                odomTopic.subscribe(function (message) {
+                    let posX = parseFloat(message.pose.pose.position.x.toFixed(2));
+                    let posY = parseFloat(message.pose.pose.position.y.toFixed(2));
+                    console.log(`Odometry Updated: X=${posX}, Y=${posY}`);
+                    document.getElementById('posX').textContent = `X: ${posX}`;
+                    document.getElementById('posY').textContent = `Y: ${posY}`;
+
+                    // Log odometry data with timestamp
+                    let timestamp = Date.now();
+                    odomData.push({ x: posX, y: posY, time: timestamp });
+
+                    // Filter data to keep only the last 60 seconds
+                    const cutoffTime = timestamp - 60000; // 60 seconds in milliseconds
+                    odomData = odomData.filter(data => data.time >= cutoffTime);
+
+                    // Update odometry chart
+                    odomChart.data.datasets[0].data = odomData.map(data => ({ x: data.x, y: data.y }));
+                    odomChart.update();
+                });
+
+                // Subscribe to IR topic
+                let irTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/${robName}/ir_intensity`,
+                    messageType: 'irobot_create_msgs/IrIntensityVector'
+                });
+
+                irTopic.subscribe(function (message) {
+                    let irValues = [];
+                    for (let i = 0; i <= 6; i++) {
+                        irValues.push(message.readings[i].value);
+                    }
+                    // Update the chart with new IR values
+                    irChart.data.datasets[0].data = irValues;
+                    irChart.update();
+                });
+            });
+
+            // Publish to cmd_vel when forward button is pressed
+            let cmdVel = new ROSLIB.Topic({
+                ros: ros,
+                name: `/${robName}/cmd_vel`,
+                messageType: 'geometry_msgs/Twist'
+            });
+
+            fwdBtn.addEventListener("click", function () {
+                console.log("Forward Button Pressed");
+                clearInterval(intervalId);
+                intervalId = setInterval(function () {
+                    let twist = new ROSLIB.Message({
+                        linear: { x: 0.2, y: 0.0, z: 0.0 },
+                        angular: { x: 0.0, y: 0.0, z: 0.0 }
+                    });
+                    cmdVel.publish(twist);
+                }, 100);
+            });
+
+            // Turn the robot left
+            leftBtn.addEventListener("click", function () {
+                console.log("Left Button Pressed");
+                clearInterval(intervalId);
+                intervalId = setInterval(function () {
+                    let twist = new ROSLIB.Message({
+                        linear: { x: 0.0, y: 0.0, z: 0.0 },
+                        angular: { x: 0.0, y: 0.0, z: 1.0 }
+                    });
+                    cmdVel.publish(twist);
+                }, 100);
+            });
+
+            // Turn the robot right
+            rightBtn.addEventListener("click", function () {
+                console.log("Right Button Pressed");
+                clearInterval(intervalId);
+                intervalId = setInterval(function () {
+                    let twist = new ROSLIB.Message({
+                        linear: { x: 0.0, y: 0.0, z: 0.0 },
+                        angular: { x: 0.0, y: 0.0, z: -1.0 }
+                    });
+                    cmdVel.publish(twist);
+                }, 100);
+            });
+
+            // Stop the robot
+            stopBtn.addEventListener("click", function () {
+                console.log("Stop Button Pressed");
+                clearInterval(intervalId);
+                let twist = new ROSLIB.Message({
+                    linear: { x: 0.0, y: 0.0, z: 0.0 },
+                    angular: { x: 0.0, y: 0.0, z: 0.0 }
+                });
+                cmdVel.publish(twist);
+            });
+        });
+
+        // When the disconnect button is clicked
+        disconnectBtn.addEventListener("click", function () {
+            if (ros) {
+                ros.close(); // Disconnect from ROS
+                console.log("Disconnected from ROS network.");
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').style.color = 'red';
+                connBtn.style.display = 'inline-block';
+                disconnectBtn.style.display = 'none';
+            } else {
+                console.warn("No active ROS connection to disconnect.");
+            }
+        });
+
+        // Add event listener for WF button
+        wfBtn.addEventListener("click", function () {
+            if (!ros) {
+                console.error("ROS connection is not established. Please connect first.");
+                return;
+            }
+
+            // Proportional gain for steering control
+            const Kp = 0.035;
+
+            // Thresholds
+            const desiredDistance = 50;
+            const rightDropThreshold = 10; // Significant drop in right IR sensor value
+            const sharpTurnFactor = 0.01;  // Scaling for sharper turns
+
+            // Variables to track previous right IR sensor reading
+            let prevRightDistance = null;
+            let prevTime = Date.now();
+
+            // Subscribe to IR topic
+            let irTopic = new ROSLIB.Topic({
+                ros: ros,
+                name: `/${robName}/ir_intensity`,
+                messageType: 'irobot_create_msgs/IrIntensityVector'
+            });
+
+            irTopic.subscribe((message) => {
+                if (message.readings && message.readings.length === 7) {
+                    const irReadings = message.readings;
+
+                    // Extract IR sensor values
+                    const leftDistance = irReadings[0]?.value || 0;
+                    const rightDistance = irReadings[6]?.value || 0;
+                    const left = irReadings[1]?.value || 0;
+                    const leftMiddle = irReadings[2]?.value || 0;
+                    const frontDistance = irReadings[3]?.value || 0;
+                    const rightMiddle = irReadings[4]?.value || 0;
+                    const right = irReadings[5]?.value || 0;
+
+                    // Default values
+                    let linearX = 0.3;
+                    let angularZ = -Kp * ((0.5 * leftDistance + 0.4 * left + 0.1 * leftMiddle) -
+                                          (0.5 * rightDistance + 0.4 * right + 0.1 * rightMiddle));
+
+                    // Detect Right IR Sensor Drop
+                    const currentTime = Date.now();
+                    let rightDrop = 0;
+
+                    if (prevRightDistance !== null && (currentTime - prevTime >= 200)) {
+                        rightDrop = prevRightDistance - rightDistance;
+
+                        if (rightDrop > rightDropThreshold) {
+                            angularZ = Math.min(-0.5, Math.max(-3.0, -(Kp + sharpTurnFactor) * rightDrop));
+                            linearX = Math.max(0.15, 0.3 - (rightDrop * 0.05));
+                        }
+
+                        prevRightDistance = rightDistance;
+                        prevTime = currentTime;
+                    } else {
+                        prevRightDistance = rightDistance;
+                    }
+
+                    // Front Obstacle Avoidance
+                    if ([frontDistance, rightMiddle, leftMiddle, left, right].some(dist => dist > desiredDistance)) {
+                        linearX = Math.max(0.05, 0.3 - (frontDistance * 0.05));
+
+                        if (frontDistance > desiredDistance) {
+                            angularZ = leftMiddle > rightMiddle ? -1.0 : 1.0;
+                        } else if (leftMiddle > desiredDistance) {
+                            angularZ = -1.0;
+                        } else if (rightMiddle > desiredDistance) {
+                            angularZ = 1.0;
+                        }
+                    }
+
+                    // Publish velocity command
+                    let cmdVel = new ROSLIB.Topic({
+                        ros: ros,
+                        name: `/${robName}/cmd_vel`,
+                        messageType: 'geometry_msgs/Twist'
+                    });
+
+                    const twist = new ROSLIB.Message({
+                        linear: { x: linearX, y: 0, z: 0 },
+                        angular: { x: 0, y: 0, z: angularZ }
+                    });
+                    cmdVel.publish(twist);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
