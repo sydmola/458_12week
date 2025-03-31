@@ -1,0 +1,68 @@
+import numpy as np
+import time
+import math
+
+# Constants and initializations
+ld = 0.4  # Look ahead distance
+spd_des = 0.3  # max speed = 0.306 m/s
+R_trans = [[1, 0, 0], [0, 0, 1], [0, -1, 0]]
+
+# Initialize lists to hold positions
+xn = []
+ye = []
+psi = []
+
+# Assuming Path is defined as a NumPy array (each column is a point in the path)
+path_uncovered = Path # Add in path numbered here (has to be in real world)
+
+# Loop that runs continuously until the end condition is met
+while True:
+    # Robot's Position (% Mocap --> NED)
+    pos_R_G2M = obj.RigidBody[5].Position() / 1000 # position of MOCAP to global
+    oren = rotm2eul(R_trans @ obj.RigidBody[5].Rotation)  # Assuming rotm2eul converts rotation matrix to Euler angles
+
+    pos_R_M2G = (R_M2G @ pos_R_G2M).T
+
+    xn = pos_R_M2G[0] # X positon of ODOM
+    ye = pos_R_M2G[1] # Y postion of ODOM
+    psi = oren[0]     # Current angle of Euler
+
+    # Step 1: Find closest point on path from current position
+    p = [xn[0], ye[0]]  # Current position
+    distances = math.sqrt(sum((Path - p[:, None])**2, axis=0))  # Distance to each path point
+    d_min = np.min(distances)
+    idx_closest = np.argmin(distances)
+
+    p_closest = Path[:, idx_closest]
+
+    # Step 2: Find Target Point with lookahead distance
+    path_uncovered = Path[:, idx_closest:]  # Eliminate points behind the closest point
+
+    # Speed and Lookahead distance calculation
+    distances_to_path = np.sqrt(np.sum((path_uncovered - p[:, None])**2, axis=0))
+    d_lk = np.min(np.abs(distances_to_path - ld))
+    idx_target = np.argmin(np.abs(distances_to_path - ld))
+    p_target = path_uncovered[:, idx_target]
+
+    # Step 3: Find turn rate and forward speed to reach target point
+    # Convert Global frame to Body Frame
+    p_rel_G = p_target - p
+
+    rmatrixGtoB = np.array([[np.cos(psi[-1]), np.sin(psi[-1])],
+                            [-np.sin(psi[-1]), np.cos(psi[-1])]])
+
+    p_rel_B = rmatrixGtoB @ p_rel_G
+
+    r = 2 * p_rel_B[1] / ld**2
+
+    # Assuming robot.setVelCmd is defined, send velocity commands
+    robot.setVelCmd(spd_des, -r)
+
+    print(f'Speed: {spd_des}, r: {r}, ld: {ld}, xerr: {p_rel_G[0]}, yerr: {p_rel_G[1]}')
+
+    # End condition: if the distance to the last point in the path is small enough, break
+    d_end = np.linalg.norm(Path[:, -1] - p)
+    if d_end < 0.1:
+        break
+
+    time.sleep(0.1)

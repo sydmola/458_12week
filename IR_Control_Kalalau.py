@@ -21,7 +21,7 @@ Kp = 0.035
 # Thresholds
 desired_distance = 50
 right_drop_threshold = 10  # Significant drop in right IR sensor value
-sharp_turn_factor = 0.15   # Scaling for sharper turns
+sharp_turn_factor = 0.001    # Scaling for sharper turns
 
 # Variable to track previous right IR sensor reading
 prev_right_distance = None
@@ -52,20 +52,22 @@ def callback_ir(message):
 
             # Default values
             linear_x = 0.3  # Default speed
-            angular_z = -Kp * ((0.5 * left_distance + 0.1 * left + 0.4 * left_middle) - 
-                               (0.5 * right_distance + 0.1 * right + 0.4 * right_middle))  # Normal steering
+            angular_z = -Kp * ((0.5 * left_distance + 0.4 * left + 0.1 * left_middle) - 
+                               (0.5 * right_distance + 0.4 * right + 0.1 * right_middle))  # Normal steering
 
             # --- 🕒 Detect Right IR Sensor Drop Over 0.4 Seconds ---
             current_time = time.time()
             right_drop = 0
 
-            if prev_right_distance is not None and (current_time - prev_time >= 0.4):
+            if prev_right_distance is not None and (current_time - prev_time >= 0.2):
                 right_drop = prev_right_distance - right_distance  # Compute change in right IR reading
 
                 if right_drop > right_drop_threshold:  # Sharp drop detected
                     print(f"⚠️ Sharp Right Turn Detected! (Right IR Drop: {right_drop})")
-                    angular_z = max(-3.0, -Kp * right_drop * sharp_turn_factor)  # Scaled sharp right turn
-                    linear_x = 0.2  # Slow down for safety
+
+                    # Adaptive sharp turn logic
+                    angular_z = min(-0.5, max(-3.0, -(Kp + sharp_turn_factor) * right_drop))  # Scaled sharp right turn
+                    linear_x = max(0.15, 0.3 - (right_drop * 0.05))  # Slow down adaptively
 
                 # Update previous right distance **only when a large drop occurs**
                 prev_right_distance = right_distance
@@ -75,8 +77,25 @@ def callback_ir(message):
 
             # --- 🛑 FRONT OBSTACLE AVOIDANCE ---
             if any(dist > desired_distance for dist in [front_distance, right_middle, left_middle, left, right]):  
-                print("🚧 Obstacle Ahead! Slowing Down...")
-                linear_x = 0.15  # Slow down
+                print("🚧 Obstacle Ahead! Adjusting...")
+
+                # Reduce speed adaptively
+                linear_x = max(0.05, 0.3 - (front_distance * 0.05))  
+
+                # Adaptive turning based on obstacle position
+                if front_distance > desired_distance:  # Obstacle directly ahead
+                    angular_z = -1.0 if left_middle > right_middle else 1.0  # Turn away from the closer side
+                    linear_x = max(0.05, 0.3 - (front_distance * 0.05)) 
+                elif left_middle > desired_distance:  # Obstacle on the left
+                    angular_z = -1.0  # Turn right
+                    linear_x = max(0.05, 0.3 - (left_middle * 0.05)) 
+                elif right_middle > desired_distance:  # Obstacle on the right
+                    angular_z = 1.0  # Turn left
+                    linear_x = max(0.05, 0.3 - (right_middle * 0.05)) 
+                else:
+                    angular_z = angular_z
+                    linear_x = linear_x
+
 
             # Create and publish velocity command
             twist = roslibpy.Message({
@@ -87,7 +106,7 @@ def callback_ir(message):
 
             # Print sensor readings and control values
             print(f"Front: {front_distance:.2f} | Left: {left_distance:.2f} | Right: {right_distance:.2f} | "
-                  f"Right Drop: {right_drop if 'right_drop' in locals() else 'N/A'} | "
+                  f"Right Drop: {right_drop:.2f} | "
                   f"Angular Z: {angular_z:.2f} | Speed: {linear_x:.2f}")
 
         else:
