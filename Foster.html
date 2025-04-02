@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang ="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Simple Website</title>
+    </head>
+    
+    <body>
+        <h1 id = "Title">Control Panel</h1>
+        <img src = "https://i.ytimg.com/vi/YjcS6NAGPIA/maxresdefault.jpg" alt = "Robot Image" width = "500" height = "300">
+    
+        <div>
+            <input
+            type="text"
+            id="robotName"
+            placeholder="Enter robot name" />
+            <button id="connectButton">Connect</button>
+        </div>
+
+        <h2 id = "statusText">Disconnected</h2>
+        <input id = "left" class="styled" type="button" value="⬅️" />
+        <input id = "forward" class="styled" type="button" value="⬆️" />
+        <input id = "right" class="styled" type="button" value="➡️" />
+        <div id ="XYZ">
+            <p> X: <strong id = "val1">0</strong></p>
+            <p> Y: <strong id = "val2">0</strong></p>
+            <p> Z: <strong id = "val3">0</strong></p>
+        </div>
+        <canvas id="liveChart" width="400" height="200"></canvas>
+    </body>
+</html>
+
+<style>
+    body {
+        background-color: rgb(200,255,200);
+        color: black;
+        font-family: Arial;
+    }
+
+    #XYZ {
+        background: rgb(255, 225, 225);
+        border: 2px solid black;
+        border-radius: 18px;
+        width: 25%;
+        justify-content: center;
+        padding: 10px;
+        margin: 10px;
+    }
+
+    #statusText {
+        color: brown;
+    }
+
+    #left {
+        background-color: rgb(255, 225, 225);
+        border: 2px solid black;
+        border-radius: 8px;
+        margin: 10px;
+    }
+    #forward {
+        background-color: rgb(255, 225, 225);
+        border: 2px solid black;
+        border-radius: 8px;
+        
+    }
+    #right {
+        background-color: rgb(255, 225, 225);
+        border: 2px solid black;
+        border-radius: 8px;
+        margin: 10px;
+    }
+
+
+</style>
+
+
+<script src = "https://cdnjs.cloudflare.com/ajax/libs/roslibjs/1.1.0/roslib.js">
+    //import libraries
+  </script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // log to console
+    //console.log("Hello world!");
+
+    statusText = document.getElementById('statusText');
+    connectButton = document.getElementById('connectButton');
+    robotNameElmt = document.getElementById('robotName');
+    val1 = document.getElementById('val1');
+    val2 = document.getElementById('val2');
+    val3 = document.getElementById('val3');
+    left = document.getElementById('left');
+    forward = document.getElementById('forward');
+    const right = document.getElementById('right');
+    var title = document.getElementById('Title');
+    var ctx = document.getElementById('liveChart').getContext('2d');
+    let robName = '';
+    var ros;
+    let cmdVel;
+    var odomTopic;
+    var irTopic;
+    var numSensors = 7; // Adjust based on the actual number of IR sensors
+    var labels = Array.from({ length: 50 }, (_, i) => i); // X-axis labels
+    var datasets = Array.from({ length: numSensors }, (_, i) => ({
+            label: `IR Sensor ${i + 1}`,
+            data: Array(7).fill(0),
+            borderColor: `hsl(${i * 60}, 70%, 50%)`,
+            borderWidth: 2,
+            fill: false
+        }));
+    var myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                animation: false,
+            }
+        });
+
+
+    // establish ip and port of resbridge
+    const ip = '192.168.8.104';
+    const port = 9012;
+
+    //grab elements of html page
+
+
+    connectButton.addEventListener('click', function() {
+        //grab robot name
+        robotName = robotNameElmt.value;
+        robotNameElmt.style.placeholder = "Connected to " + robotName;
+        console.log(robotName);
+        
+        ros = new ROSLIB.Ros({
+            url : `ws://${ip}:${port}`
+        });
+
+        // 2. Connect to rosbridge
+        ros.on('connection', function() {
+            console.log('Connected to websocket server.')
+            statusText.innerText = "Connected";
+            statusText.style.color = "green";
+            connectButton.innerText = "Disconnect";
+            title.innerText = `Control Panel for ${robotName}`;
+        });
+
+        // 3. publish a twist message to cmdVel topic
+        cmdVel = new ROSLIB.Topic({
+            ros : ros,
+            name : `/${robotName}/cmd_vel`,
+            messageType : 'geometry_msgs/Twist'
+        });
+
+        // 3. subscribe to odom topic and post to odom
+        odomTopic = new ROSLIB.Topic({
+            ros : ros,
+            name : `/${robotName}/odom`,
+            messageType : 'nav_msgs/Odometry'
+        })
+
+        odomTopic.subscribe(function(message) {
+            console.log('Received message on ' + odomTopic.name + ': ' + message);
+            val1.innerText = message.pose.pose.position.x.toFixed(2);
+            val2.innerText = message.pose.pose.position.y.toFixed(2);
+            val3.innerText = message.pose.pose.position.z.toFixed(2);
+        });
+
+        // 4. subscribe to ir topic and post to ir
+        irTopic = new ROSLIB.Topic({
+            ros : ros,
+            name : `/${robotName}/ir_intensity`,
+            messageType : 'irobot_create_msgs/IrIntensityVector'
+        })
+
+        irTopic.subscribe(function(message) {
+            console.log('Received message on ' + irTopic.name + ': ' + message.readings[0].value);
+            let IRNumbers = [];
+            for (let i = 0; i <= 6; i++) {
+                IRNumbers.push(message.readings[i].value);
+            }
+            
+            datasets[0].data = IRNumbers;
+            myChart.update();
+            
+
+        });
+
+
+    });
+
+
+    // 5. make a publisher and publish when button clicked
+    forward.addEventListener('click', function() {
+        console.log('Foward Button Clicked');
+        var twist = new ROSLIB.Message({
+        linear : {
+            x : 0.2,
+            y : 0.0,
+            z : 0.0
+        },
+        angular : {
+            x : 0.0,
+            y : 0.0,
+            z : 0.0
+        }
+        });
+        cmdVel.publish(twist);
+    });
+
+    //left
+    left.addEventListener('click', function() {
+        console.log('Left Button Clicked');
+        var twist = new ROSLIB.Message({
+            linear : {
+            x : 0.0,
+            y : 0.0,
+            z : 0.0
+            },
+            angular : {
+            x : 0.0,
+            y : 0.0,
+            z : 0.2
+            }
+        });
+        cmdVel.publish(twist);
+    })
+
+   right.addEventListener('click', function() {
+    console.log('Right Button Clicked');
+    var twist = new ROSLIB.Message({
+       linear : {
+         x : 0.0,
+         y : 0.0,
+         z : 0.0
+       },
+       angular : {
+         x : 0.0,
+         y : 0.0,
+         z : -0.2
+       }
+     });
+     cmdVel.publish(twist);
+   })
+
+    // 6. disconnect from rosbridge
+    connectButton.addEventListener('click', function() {
+        if (connectButton.innerText === "Disconnect") {
+            ros.close();
+            statusText.innerText = "Disconnected";
+            statusText.style.color = "red";
+            connectButton.innerText = "Connect";
+            title.innerText = `Control Panel`;
+        }
+    });
+
+    
+</script>
