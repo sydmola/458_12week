@@ -10,7 +10,8 @@
         body {
             font-family: Arial, sans-serif;
             text-align: center;
-            background-color: beige;
+            background-color: black; /* Changed background to black */
+            color: red; /* Retain red text color */
         }
         h1 {
             font-size: 36px;
@@ -32,19 +33,20 @@
             font-size: 16px;
         }
         button {
-            padding: 12px;
+            padding: 12px 20px; /* Add horizontal padding for better fit */
             font-size: 16px;
-            background-color: lightblue;
+            background-color: mediumblue; /* Changed button color to medium blue */
             border: 1px solid blue;
             cursor: pointer;
             transition: background 0.3s;
             border-radius: 50%;
-            width: 60px;
+            width: auto; /* Adjust width to fit content */
             height: 60px;
             text-align: center;
+            color: white; /* Changed button text color to white */
         }
         button:hover {
-            background-color: deepskyblue;
+            background-color: deepskyblue; /* Retain hover effect */
         }
         .controls {
             margin: 20px 0;
@@ -57,8 +59,9 @@
         }
         .position p {
             margin: 3px;
-            background-color: rgb(218, 72, 43);
-            color: white;
+            background-color: mediumblue; /* Match button background color */
+            color: white; /* Match button text color */
+            border: 1px solid blue; /* Match button border */
             border-radius: 18px;
             padding: 10px;
             width: 100px;
@@ -72,10 +75,24 @@
             max-width: 100%;
             height: auto;
         }
+        .top-right {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 600px; /* Doubled size from 150px to 300px */
+        }
+        .top-left {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 300px; /* Adjust size as needed */
+        }
     </style>
 </head>
 <body>
-    <h1>Control Panel</h1>
+    <img src="Images/download.jfif" alt="Download Logo" class="top-left">
+    <img src="Images/RedBull.png" alt="RedBull Logo" class="top-right">
+    <h1>REDBULL</h1>
     <br>
     <input type="text" id="nameInput" placeholder="Enter robot name">
     <button id="connBtn">C</button>
@@ -99,9 +116,22 @@
     <div class="chart-container">
         <canvas id="odomChart"></canvas>
     </div>
+    <div id="stopwatch" style="font-size: 20px; color: white; margin-top: 10px;">Timer: 00:00:00</div>
     <script>
         console.clear();
         console.log("Made it here");
+
+        // Add audio element for .mp3 file
+        const wfAudio = new Audio('audio/tutututu-max-verstappen.mp3'); // Corrected path
+
+        const blue_led_colors = [
+            { red: 0, green: 0, blue: 255 },
+            { red: 0, green: 0, blue: 255 },
+            { red: 0, green: 0, blue: 255 },
+            { red: 0, green: 0, blue: 255 },
+            { red: 0, green: 0, blue: 255 },
+            { red: 0, green: 0, blue: 255 }
+        ];
 
         const ip = "192.168.8.104";
         const port = "9012";
@@ -134,8 +164,8 @@
                 datasets: [{
                     label: 'IR Sensor Values',
                     data: [0, 0, 0, 0, 0, 0, 0],
-                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(255, 215, 0, 0.6)', // Changed to golden yellow
+                    borderColor: 'rgba(255, 215, 0, 1)', // Changed to golden yellow
                     borderWidth: 1
                 }]
             },
@@ -148,7 +178,7 @@
                             font: {
                                 size: 14
                             },
-                            color: 'rgba(54, 162, 235, 1)'
+                            color: 'rgba(255, 215, 0, 1)' // Changed to golden yellow
                         }
                     },
                     tooltip: {
@@ -168,10 +198,10 @@
                 scales: {
                     x: {
                         grid: {
-                            color: 'rgba(54, 162, 235, 0.2)'
+                            color: 'rgba(255, 215, 0, 0.2)' // Changed to golden yellow
                         },
                         ticks: {
-                            color: 'rgba(54, 162, 235, 1)',
+                            color: 'rgba(255, 215, 0, 1)', // Changed to golden yellow
                             font: {
                                 size: 12
                             }
@@ -181,10 +211,10 @@
                         beginAtZero: true,
                         max: 3500,
                         grid: {
-                            color: 'rgba(54, 162, 235, 0.2)'
+                            color: 'rgba(255, 215, 0, 0.2)' // Changed to golden yellow
                         },
                         ticks: {
-                            color: 'rgba(54, 162, 235, 1)',
+                            color: 'rgba(255, 215, 0, 1)', // Changed to golden yellow
                             font: {
                                 size: 12
                             }
@@ -202,8 +232,8 @@
                 datasets: [{
                     label: 'Trajectory',
                     data: [], // Array of {x, y} points
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(255, 215, 0, 1)', // Same as IR plot (golden yellow)
+                    backgroundColor: 'rgba(255, 215, 0, 0.2)', // Same as IR plot (golden yellow)
                     showLine: true,
                     fill: true
                 }]
@@ -221,16 +251,16 @@
                             display: true,
                             text: 'X Position'
                         },
-                        min: 5,
-                        max: 9.5
+                        min: -4,
+                        max: 2
                     },
                     y: {
                         title: {
                             display: true,
                             text: 'Y Position'
                         },
-                        min: -2,
-                        max: 2
+                        min: 4,
+                        max: 8
                     }
                 }
             }
@@ -262,11 +292,12 @@
                     battVoltage.innerText = btP.toFixed(1);
                 });
 
-                // Subscribe to odometry topic
+                // Subscribe to odometry topic with a 0.5-second update rate
                 let odomTopic = new ROSLIB.Topic({
                     ros: ros,
                     name: `/${robName}/odom`,
-                    messageType: 'nav_msgs/Odometry'
+                    messageType: 'nav_msgs/Odometry',
+                    throttle_rate: 500 // Update rate set to 0.5 seconds (500 ms)
                 });
 
                 odomTopic.subscribe(function (message) {
@@ -317,6 +348,8 @@
             fwdBtn.addEventListener("click", function () {
                 console.log("Forward Button Pressed");
                 clearInterval(intervalId);
+
+                // Publish velocity command
                 intervalId = setInterval(function () {
                     let twist = new ROSLIB.Message({
                         linear: { x: 0.2, y: 0.0, z: 0.0 },
@@ -324,6 +357,20 @@
                     });
                     cmdVel.publish(twist);
                 }, 100);
+
+                // Set the light ring to blue
+                const lightRingTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: '/light_ring/color',  // Replace with your light ring control topic
+                    messageType: 'std_msgs/String'  // Assuming the color is a string message like "blue"
+                });
+
+                const blueMessage = new ROSLIB.Message({
+                    data: blue_led_colors  // Change 'blue' to the actual color string your system accepts
+                });
+
+                lightRingTopic.publish(blueMessage);
+                console.log("Light ring set to blue when moving forward.");
             });
 
             // Turn the robot left
@@ -373,6 +420,17 @@
                 document.getElementById('status').style.color = 'red';
                 connBtn.style.display = 'inline-block';
                 disconnectBtn.style.display = 'none';
+
+                // Save the timer data to a text file
+                const stopwatchElement = document.getElementById("stopwatch");
+                const timerData = stopwatchElement.textContent;
+                const blob = new Blob([`Timer Data: ${timerData}`], { type: "text/plain" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "timer_data.txt";
+                link.click();
+
+                console.log("Timer data saved to timer_data.txt.");
             } else {
                 console.warn("No active ROS connection to disconnect.");
             }
@@ -385,13 +443,37 @@
                 return;
             }
 
+            // Play the .mp3 file
+            wfAudio.play();
+
+            // Reset and start the stopwatch
+            let stopwatchElement = document.getElementById("stopwatch");
+            let seconds = 0;
+            clearInterval(intervalId); // Clear any existing interval
+            intervalId = setInterval(() => {
+                seconds++;
+                const hrs = String(Math.floor(seconds / 3600)).padStart(2, '0');
+                const mins = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+                const secs = String(seconds % 60).padStart(2, '0');
+                stopwatchElement.textContent = `Timer: ${hrs}:${mins}:${secs}`;
+            }, 1000);
+
+            console.log("WF button clicked. Stopwatch started.");
+
+            // Reset odometry values to zero
+            document.getElementById('posX').textContent = "X: 0";
+            document.getElementById('posY').textContent = "Y: 0";
+            odomData = []; // Clear odometry data array
+            odomChart.data.datasets[0].data = []; // Clear odometry chart data
+            odomChart.update(); // Update the chart
+
             // Proportional gain for steering control
-            const Kp = 0.035;
+            const Kp = 0.005;
 
             // Thresholds
             const desiredDistance = 50;
             const rightDropThreshold = 10; // Significant drop in right IR sensor value
-            const sharpTurnFactor = 0.01;  // Scaling for sharper turns
+            const sharpTurnFactor = 0.03;  // Scaling for sharper turns
 
             // Variables to track previous right IR sensor reading
             let prevRightDistance = null;
@@ -431,7 +513,7 @@
 
                         if (rightDrop > rightDropThreshold) {
                             angularZ = Math.min(-0.5, Math.max(-3.0, -(Kp + sharpTurnFactor) * rightDrop));
-                            linearX = Math.max(0.15, 0.3 - (rightDrop * 0.05));
+                            linearX = linearX
                         }
 
                         prevRightDistance = rightDistance;
@@ -447,9 +529,9 @@
                         if (frontDistance > desiredDistance) {
                             angularZ = leftMiddle > rightMiddle ? -1.0 : 1.0;
                         } else if (leftMiddle > desiredDistance) {
-                            angularZ = -1.0;
+                            angularZ = -.50;
                         } else if (rightMiddle > desiredDistance) {
-                            angularZ = 1.0;
+                            angularZ = .50;
                         }
                     }
 
